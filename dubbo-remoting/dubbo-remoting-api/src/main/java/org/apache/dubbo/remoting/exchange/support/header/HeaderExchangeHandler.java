@@ -96,6 +96,7 @@ public class HeaderExchangeHandler implements ChannelHandlerDelegate {
             return;
         }
         // find handler by message class.
+
         Object msg = req.getData();
         try {
             CompletionStage<Object> future = handler.reply(channel, msg);
