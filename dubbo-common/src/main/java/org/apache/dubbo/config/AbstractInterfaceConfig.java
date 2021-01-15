@@ -96,6 +96,7 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
 
     /**
      * Connection limits, 0 means shared connection, otherwise it defines the connections delegated to the current service
+     * 连接限制，0表示共享连接，否则定义委托给当前服务的连接
      */
     protected Integer connections;
 
