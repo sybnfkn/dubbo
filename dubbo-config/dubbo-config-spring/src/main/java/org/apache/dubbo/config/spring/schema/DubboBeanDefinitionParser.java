@@ -29,14 +29,13 @@ import org.apache.dubbo.config.ProviderConfig;
 import org.apache.dubbo.config.RegistryConfig;
 import org.apache.dubbo.config.spring.ReferenceBean;
 import org.apache.dubbo.config.spring.ServiceBean;
-import org.apache.dubbo.config.spring.beans.factory.annotation.DubboConfigAliasPostProcessor;
 
 import org.springframework.beans.PropertyValue;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinitionHolder;
 import org.springframework.beans.factory.config.RuntimeBeanReference;
 import org.springframework.beans.factory.config.TypedStringValue;
-import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.ManagedList;
 import org.springframework.beans.factory.support.ManagedMap;
 import org.springframework.beans.factory.support.RootBeanDefinition;
@@ -55,8 +54,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-import static com.alibaba.spring.util.BeanRegistrar.registerInfrastructureBean;
-import static org.apache.dubbo.common.constants.CommonConstants.HIDE_KEY_PREFIX;
+import static org.apache.dubbo.common.constants.CommonConstants.HIDDEN_KEY_PREFIX;
 
 /**
  * AbstractBeanDefinitionParser
@@ -80,7 +78,7 @@ public class DubboBeanDefinitionParser implements BeanDefinitionParser {
     }
 
     @SuppressWarnings("unchecked")
-    private static BeanDefinition parse(Element element, ParserContext parserContext, Class<?> beanClass, boolean required) {
+    private static RootBeanDefinition parse(Element element, ParserContext parserContext, Class<?> beanClass, boolean required) {
         RootBeanDefinition beanDefinition = new RootBeanDefinition();
         beanDefinition.setBeanClass(beanClass);
         beanDefinition.setLazyInit(false);
@@ -129,12 +127,6 @@ public class DubboBeanDefinitionParser implements BeanDefinitionParser {
                 classDefinition.setLazyInit(false);
                 parseProperties(element.getChildNodes(), classDefinition, parserContext);
                 beanDefinition.getPropertyValues().addPropertyValue("ref", new BeanDefinitionHolder(classDefinition, id + "Impl"));
-            }
-        } else if (ReferenceBean.class.equals(beanClass)) {
-            String interfaceClassName = resolveAttribute(element, "interface", parserContext);
-            if (StringUtils.isNotEmpty(interfaceClassName)) {
-                Class<?> interfaceClass = ReflectUtils.forName(interfaceClassName);
-                beanDefinition.setTargetType(interfaceClass);
             }
         } else if (ProviderConfig.class.equals(beanClass)) {
             parseNested(element, parserContext, ServiceBean.class, true, "service", "provider", id, beanDefinition);
@@ -328,7 +320,7 @@ public class DubboBeanDefinitionParser implements BeanDefinitionParser {
                 String value = resolveAttribute(element, "value", parserContext);
                 boolean hide = "true".equals(resolveAttribute(element, "hide", parserContext));
                 if (hide) {
-                    key = HIDE_KEY_PREFIX + key;
+                    key = HIDDEN_KEY_PREFIX + key;
                 }
                 parameters.put(key, new TypedStringValue(value, String.class));
             }
@@ -356,17 +348,35 @@ public class DubboBeanDefinitionParser implements BeanDefinitionParser {
                 if (methods == null) {
                     methods = new ManagedList();
                 }
-                BeanDefinition methodBeanDefinition = parse(element,
+                RootBeanDefinition methodBeanDefinition = parse(element,
                         parserContext, MethodConfig.class, false);
-                String name = id + "." + methodName;
+                String beanName = id + "." + methodName;
+
+                // If the PropertyValue named "id" can't be found,
+                // bean name will be taken as the "id" PropertyValue for MethodConfig
+                if (!hasPropertyValue(methodBeanDefinition, "id")) {
+                    addPropertyValue(methodBeanDefinition, "id", beanName);
+                }
+
                 BeanDefinitionHolder methodBeanDefinitionHolder = new BeanDefinitionHolder(
-                        methodBeanDefinition, name);
+                        methodBeanDefinition, beanName);
                 methods.add(methodBeanDefinitionHolder);
             }
         }
         if (methods != null) {
             beanDefinition.getPropertyValues().addPropertyValue("methods", methods);
         }
+    }
+
+    private static boolean hasPropertyValue(AbstractBeanDefinition beanDefinition, String propertyName) {
+        return beanDefinition.getPropertyValues().contains(propertyName);
+    }
+
+    private static void addPropertyValue(AbstractBeanDefinition beanDefinition, String propertyName, String propertyValue) {
+        if (StringUtils.isBlank(propertyName) || StringUtils.isBlank(propertyValue)) {
+            return;
+        }
+        beanDefinition.getPropertyValues().addPropertyValue(propertyName, propertyValue);
     }
 
     @SuppressWarnings("unchecked")
@@ -401,20 +411,7 @@ public class DubboBeanDefinitionParser implements BeanDefinitionParser {
 
     @Override
     public BeanDefinition parse(Element element, ParserContext parserContext) {
-        // Register DubboConfigAliasPostProcessor
-        registerDubboConfigAliasPostProcessor(parserContext.getRegistry());
-
         return parse(element, parserContext, beanClass, required);
-    }
-
-    /**
-     * Register {@link DubboConfigAliasPostProcessor}
-     *
-     * @param registry {@link BeanDefinitionRegistry}
-     * @since 2.7.5 [Feature] https://github.com/apache/dubbo/issues/5093
-     */
-    private void registerDubboConfigAliasPostProcessor(BeanDefinitionRegistry registry) {
-        registerInfrastructureBean(registry, DubboConfigAliasPostProcessor.BEAN_NAME, DubboConfigAliasPostProcessor.class);
     }
 
     private static String resolveAttribute(Element element, String attributeName, ParserContext parserContext) {
