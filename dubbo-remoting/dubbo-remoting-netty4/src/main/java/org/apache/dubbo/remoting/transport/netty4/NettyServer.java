@@ -103,6 +103,8 @@ public class NettyServer extends AbstractServer implements RemotingServer {
                 .option(ChannelOption.SO_REUSEADDR, Boolean.TRUE)
                 .childOption(ChannelOption.TCP_NODELAY, Boolean.TRUE)
                 .childOption(ChannelOption.SO_KEEPALIVE, keepalive)
+                // 池化内存池
+                // 是否直接或者堆内：取决于系统是否偏好
                 .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
